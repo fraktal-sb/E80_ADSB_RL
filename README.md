@@ -1,23 +1,18 @@
 # E80_ADSB_RL
 
-**Experimental 1090 MHz ADS-B Receiver based on the Ebyte E80 module, LR2021 and RadioLib.**
+ADS-B 1090 MHz receiver based on the **Ebyte E80-900MBL-02** module with LR2021 transceiver and an STM32F103C8T6 microcontroller.
 
-E80_ADSB_RL is an experimental ADS-B receiver designed to receive 1090 MHz Mode-S signals and forward decoded ADS-B messages to a Stratux system.
-
-The project uses an Ebyte E80 module with an LR2021 transceiver, controlled by an STM32F103C8T6 microcontroller and the RadioLib library.
-
-The receiver decodes ADS-B messages and outputs valid DF17 frames in AVR format, making them available to compatible applications such as Stratux.
+The firmware uses [RadioLib](https://github.com/jgromes/RadioLib) to receive ADS-B signals in OOK mode and outputs decoded Mode-S messages in AVR format for use with [Stratux](https://github.com/b3nn0/stratux).
 
 ## Features
 
-- 1090 MHz ADS-B reception
-- OOK signal reception using the LR2021
-- ADS-B message decoding using RadioLib
-- DF17 message filtering
-- CRC generation and validation
-- AVR-compatible output format
-- Serial interface for Stratux integration
-- USB serial output for debugging and testing
+- ADS-B reception at 1090 MHz using OOK modulation
+- LR2021 transceiver controlled through RadioLib
+- STM32F103C8T6 microcontroller
+- DF17 message output in AVR format
+- Serial output for connection to Stratux
+- GPIO UART and USB-UART connection options
+- No aircraft database or traffic management in the receiver itself
 
 ## Hardware
 
@@ -26,15 +21,17 @@ The receiver decodes ADS-B messages and outputs valid DF17 frames in AVR format,
 | Microcontroller | STM32F103C8T6 |
 | Radio module | Ebyte E80-900MBL-02 |
 | RF transceiver | LR2021 |
-| RF frequency | 1090 MHz |
+| Radio library | RadioLib 7.8.1 |
+| Operating frequency | 1090 MHz |
 | Modulation | OOK |
-| GPS | Not required by this receiver |
 
-The E80 module contains an internal 32 MHz TCXO powered through DIO3 at 1.8 V.
+The E80 module uses an internal 32 MHz TCXO. The TCXO is supplied through DIO3 at 1.8 V.
 
-### Pin configuration
+## Pin Configuration
 
-| Signal | STM32 pin |
+The following table describes the connections between the STM32F103C8T6 and the LR2021 radio module.
+
+| Signal | STM32F103C8T6 pin |
 |---|---|
 | SPI MOSI | PA7 |
 | SPI MISO | PA6 |
@@ -43,56 +40,66 @@ The E80 module contains an internal 32 MHz TCXO powered through DIO3 at 1.8 V.
 | RADIO_BUSY | PA3 |
 | RADIO_NRST | PB0 |
 | RADIO_IRQ | PA0 |
+
+### Serial and LED connections
+
+| Function | STM32F103C8T6 pin |
+|---|---|
 | DebugSerial TX | PA9 |
 | DebugSerial RX | PA10 |
 | LED1 | PB13 |
 | LED2 | PB12 |
 
-## Software
+The LED outputs are active LOW.
 
-The project is developed using the Arduino framework.
+See [HARDWARE.md](HARDWARE.md) for the hardware connections and interface details.
+
+## Software
 
 ### Dependencies
 
-- Arduino STM32 core
-- [RadioLib](https://github.com/jgromes/RadioLib) – version 7.8.1
+- Arduino IDE or compatible Arduino development environment
+- STM32duino core for STM32F1
+- [RadioLib](https://github.com/jgromes/RadioLib) version 7.8.1
 
-RadioLib is used as an external library and is not included in this repository.
+RadioLib is an external dependency and is not included in this repository.
 
-### Configuration
-
-Main receiver parameters:
+### Main receiver parameters
 
 | Parameter | Value |
-|---|---|
+|---|---:|
 | RX frequency | 1090.0 MHz |
-| RX bitrate | 2000.0 kbps |
+| Bitrate | 2000.0 kbps |
 | RX bandwidth | 3076.0 kHz |
+| Modulation | OOK |
 | Output format | AVR |
-| Message type | DF17 |
+| Message filter | DF17 |
 
 ## AVR Output Format
 
-Valid DF17 messages are output in the standard AVR text format:
+The receiver outputs ADS-B messages in the common AVR text format:
 
 ```text
 *8D3C66B49908C72E785C1AFCC42D;
 *8D3C66B49908C82E585C1AA8DA1E;
+*8D3C66B45887541E696BE0A23D41;
 ```
 
 Each message consists of:
 
-- `*` – start of message
-- 28 hexadecimal characters – 112-bit Mode-S frame
-- `;` – end of message
+- `*` – start marker
+- 28 hexadecimal characters – 112-bit Mode-S message (14 bytes)
+- `;` – end marker
 
-The output is intended to be consumed by Stratux or other software supporting AVR-format ADS-B input.
+The firmware currently outputs DF17 messages. The Mode-S frame includes its CRC field.
 
 ## Stratux Integration
 
-The receiver is designed to work as an external ADS-B data source for Stratux.
+The E80 receiver provides raw ADS-B traffic messages to Stratux. Stratux performs aircraft tracking, position calculations and traffic presentation using the received messages and its own GPS data.
 
-The intended data path is:
+The E80 receiver does not maintain an aircraft database and does not calculate aircraft positions.
+
+### Data path
 
 ```text
 Ebyte E80 / LR2021
@@ -101,13 +108,13 @@ Ebyte E80 / LR2021
 STM32F103C8T6
         |
         v
-ADS-B decoding
+ADS-B reception and decoding
         |
         v
 AVR message output
         |
         v
-Serial / USB serial
+Serial / USB-UART
         |
         v
 Stratux
@@ -116,111 +123,105 @@ Stratux
 Traffic display
 ```
 
-Stratux handles aircraft tracking and position calculations using its own GPS data.
+### Related repositories
 
-The E80 receiver does not maintain its own aircraft database.
+| Repository | Purpose |
+|---|---|
+| [E80_ADSB_RL](https://github.com/fraktal-sb/E80_ADSB_RL) | E80 receiver firmware and hardware documentation |
+| [Stratux – E80-ADSB branch](https://github.com/fraktal-sb/stratux/tree/E80-ADSB) | Stratux modifications for receiving and processing E80 AVR messages |
 
-Further details about the Stratux configuration and serial interface will be documented in `docs/STRATUX.md`.
+The Stratux branch contains the corresponding changes required to receive the E80 data.
 
-### Stratux Serial Interfaces
+### Serial interfaces
 
-The E80 receiver supports two separate serial output paths for transmitting decoded ADS-B messages to a Stratux system.
+Two connection methods have been tested separately.
 
 #### 1. Raspberry Pi GPIO UART
 
-The E80 evaluation board provides a UART interface via its J2 connector.
+Connect the E80 board's UART output to the Raspberry Pi UART input:
 
-| E80 connection | Raspberry Pi connection |
+| E80 board | Raspberry Pi |
 |---|---|
-| J2-7 `MCU_TXD` | GPIO15 / RXD (physical pin 10) |
-| GND | GND (physical pin 6) |
+| J2-7 `MCU_TXD` | GPIO15 / RXD, physical pin 10 |
+| GND | GND, physical pin 6 |
 
 Serial configuration:
 
-- Baud rate: **38400**
-- Format: **8N1**
-- Data direction: E80 → Raspberry Pi
-- Firmware initialization: `GPIOSerial.begin(38400);`
+- Baud rate: 38400
+- Data format: 8N1
+- Data direction: E80 receiver → Raspberry Pi
+
+Firmware initialization:
+
+```cpp
+GPIOSerial.begin(38400);
+```
 
 This connection has been successfully tested with Stratux.
 
-#### 2. USB-UART interface
+#### 2. USB-UART connection
 
-The E80 evaluation board also provides a USB-UART interface via its CH340 adapter.
+The E80 evaluation board provides a CH340 USB-UART adapter.
 
-A udev rule identifies the adapter and creates the device symlink `/dev/ping`:
+The following udev rule creates the `/dev/ping` device link:
 
 ```udev
 # Ebyte E80-900M2212S with CH340 USB-UART Adapter
 SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="ping"
 ```
 
-The rule is provided in the repository as `80-e80-adsb.rules`.
+The rule is included in this repository:
 
-The USB-UART interface has been tested separately. Its simultaneous operation with the GPIO UART has **not yet been verified**.
+[`80-e80-adsb.rules`](80-e80-adsb.rules)
 
-#### Interface status
+The USB-UART connection has also been tested separately with Stratux.
 
-| Interface / feature | Status |
-|---|---|
-| GPIO UART, 38400 baud | Successfully tested |
-| USB-UART via CH340 | Successfully tested separately |
-| Simultaneous GPIO UART and USB-UART output | Not yet tested |
+**Note:** Simultaneous operation of the GPIO UART and USB-UART outputs has not yet been verified.
 
-Both interfaces carry the same AVR-format ADS-B messages:
+For further details, see [STRATUX.md](STRATUX.md).
 
-```text
-*8D3C66B49908C72E785C1AFCC42D;
-```
+## Installation and Configuration
 
-Stratux receives and processes these messages through its ADS-B serial input. Aircraft tracking and position management remain the responsibility of Stratux.
+1. Install the STM32 Arduino core and RadioLib 7.8.1.
+2. Open `E80_ADSB_RL.ino` in the Arduino IDE.
+3. Select the appropriate STM32F103C8T6 board and upload configuration.
+4. Compile and upload the firmware.
+5. Connect the receiver to Stratux using one of the documented serial interfaces.
+6. Use the [Stratux E80-ADSB branch](https://github.com/fraktal-sb/stratux/tree/E80-ADSB).
 
-
-## Installation
-
-1. Install the Arduino IDE.
-2. Install the STM32 Arduino core.
-3. Install RadioLib 7.8.1.
-4. Connect the E80 module to the STM32 according to the pin configuration.
-5. Open `E80_ADSB_RL.ino`.
-6. Select the appropriate STM32 board and upload the firmware.
+The receiver configuration and hardware pin assignments are defined in the firmware.
 
 ## Project Status
-
-<badge>Experimental</badge>
 
 | Feature | Status |
 |---|---|
 | LR2021 initialization | Working |
-| 1090 MHz OOK reception | Working |
-| ADS-B decoding | Working |
-| DF17 filtering | Working |
-| AVR output | Working |
-| USB serial output | Working |
-| Stratux integration | Successfully tested |
-| Further interface development | In progress |
+| ADS-B 1090 MHz OOK reception | Working |
+| DF17 message output | Working |
+| AVR output format | Working |
+| Raspberry Pi GPIO UART connection | Successfully tested |
+| USB-UART connection | Successfully tested separately |
+| Simultaneous GPIO UART and USB-UART operation | Not yet verified |
+| Stratux traffic display via GPIO UART | Successfully tested |
 
 ## Repository Structure
 
 ```text
 E80_ADSB_RL/
 ├── E80_ADSB_RL.ino
+├── 80-e80-adsb.rules
 ├── README.md
+├── HARDWARE.md
+├── STRATUX.md
 ├── LICENSE
-├── CHANGELOG.md
-├── .gitignore
-├── docs/
-├── hardware/
-├── images/
-├── examples/
-└── 80-e80-adsb.rules
+└── .gitignore
 ```
 
 ## Disclaimer
 
-This is an experimental hardware and software project.
+This project is experimental and intended for development and evaluation purposes.
 
-It is intended for development, testing and educational purposes. It is not a certified aviation device and must not be used as a substitute for approved aviation equipment.
+It is not certified aviation equipment and must not be used as a primary or safety-critical source of flight information.
 
 ## License
 
@@ -230,4 +231,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 - [RadioLib](https://github.com/jgromes/RadioLib) by Jan Gromes
 - [Stratux](https://github.com/b3nn0/stratux) open-source ADS-B receiver project
-- The open-source ADS-B and aviation electronics community
+- Ebyte for the E80 module and documentation
