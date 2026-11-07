@@ -1,0 +1,34 @@
+cd ~/E80_ADSB_RL
+
+cat > .gitignore <<'EOF'
+# Local Arduino libraries
+/libraries/
+
+# Local Stratux executable
+/stratuxrun
+
+# Previous development sketches
+/sketch_nov4/
+/sketch_nov5b/
+/sketch_nov6a/
+
+# Arduino build files
+/build/
+/*.elf
+/*.hex
+/*.bin
+/*.map
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+EOF
