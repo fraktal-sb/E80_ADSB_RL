@@ -1,4 +1,3 @@
-
 #include <Arduino.h>
 #include <SPI.h>
 #include <RadioLib.h>
@@ -250,58 +249,6 @@ void printDecodedFrame()
 
 #endif
 }
-
-// ==================================================
-// PROCESS RECEIVED ADS-B PACKET
-// ==================================================
-/*
-void processReceivedPacket()
-{
-    uint8_t buffer[11];
-
-    // Read received packet
-    int16_t state = radio.readData(
-        buffer,
-        sizeof(buffer)
-    );
-
-    if (state != RADIOLIB_ERR_NONE) {
-
-#if DEBUG
-        if (state != RADIOLIB_ERR_CRC_MISMATCH) {
-            Serial.print("# Read error: ");
-            Serial.println(state);
-        }
-#endif
-
-        return;
-    }
-
-    // Decode ADS-B packet
-    state = adsb.decode(buffer, &frame);
-
-    if (state != RADIOLIB_ERR_NONE) {
-
-#if DEBUG
-        Serial.print("# Decode error: ");
-        Serial.println(state);
-#endif
-
-        return;
-    }
-
-    // AVR output
-    outputAVR(buffer);
-
-    // Human-readable debug output
-    printDecodedFrame();
-
-    digitalWrite(LED2_PIN, LED_ON);
-    led2Active = true;
-    led2OffTime = millis() + 100;
-
-}
-*/
 
 // ==================================================
 // START ADS-B RECEPTION

@@ -7,11 +7,6 @@ cat > .gitignore <<'EOF'
 # Local Stratux executable
 /stratuxrun
 
-# Previous development sketches
-/sketch_nov4/
-/sketch_nov5b/
-/sketch_nov6a/
-
 # Arduino build files
 /build/
 /*.elf

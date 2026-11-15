@@ -1,0 +1,57 @@
+picocom -b 115200 /dev/ttyUSB0
+
+--------------------------------------------------------------------------------
+Stratux image auf Micro- SD-Karte kopieren
+--------------------------------------------------------------------------------
+
+sudo dd bs=4M if=/media/josef/2073999A60EA62571/Hardware/Stratux/Release/2026-03-02-stratux-lite.img of=/dev/sdb status=progress conv=fsync
+
+--------------------------------------------------------------------------------
+stratuxrun kopieren/aktivieren
+--------------------------------------------------------------------------------
+sudo systemctl stop stratux
+sudo overlayctl unlock
+
+sudo cp /home/pi/stratuxrun /overlay/robase/opt/stratux/bin/stratuxrun
+cp 80-e80-adsb.rules /etc/udev/rules.d/80-e80-adsb.rules
+
+sudo chown root:root /overlay/robase/opt/stratux/bin/stratuxrun
+sudo chmod 755 /overlay/robase/opt/stratux/bin/stratuxrun
+
+sudo sync
+sudo overlayctl lock
+sudo systemctl start stratux
+
+--------------------------------------------------------------------------------
+Bluetooth deaktivieren (gpio + bluetooth zusammen geht nicht)
+--------------------------------------------------------------------------------
+
+sudo systemctl stop stratux
+sudo overlayctl unlock
+sudo nano /boot/firmware/config.txt
+    dtoverlay=disable-bt
+sudo systemctl disable hciuart
+sudo overlayctl lock
+sudo reboot
+
+--------------------------------------------------------------------------------
+Pin Belegung
+--------------------------------------------------------------------------------
+
+Stratux (raspberryPi 3b)
+
+pin     bedeutung
+
+1       3.3V
+39      GND
+15      RXD
+
+E80
+
+J1-1 GND    GND
+J1-1 3.3V   3.3V
+
+MCU_TXD     TXD
+
+Verbindung E80-TXD zu RaspberryPi_GPIO RXD
+
