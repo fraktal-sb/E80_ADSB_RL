@@ -16,6 +16,13 @@ https://github.com/fraktal-sb/stratux/tree/E80-ADSB-RL
 
 ## 2. System Architecture
 
+Two alternative serial interfaces can connect the E80 receiver to the Raspberry Pi:
+
+- GPIO UART (`/dev/ttyAMA0`)
+- USB-UART via the onboard CH340 adapter (`/dev/ttyUSB0`)
+
+Both interfaces are mapped to the common device name `/dev/E80`.
+
 ```text
         ADS-B 1090 MHz
                |
@@ -35,13 +42,14 @@ https://github.com/fraktal-sb/stratux/tree/E80-ADSB-RL
                v
           AVR output
                |
-          GPIO UART
-          38400 baud
+        GPIO UART or
+          USB-UART
+         38400 baud
                |
                v
        Raspberry Pi 3B
                |
-          /dev/E80
+           /dev/E80
                |
                v
             Stratux
@@ -57,7 +65,20 @@ https://github.com/fraktal-sb/stratux/tree/E80-ADSB-RL
 
 ## 3. Serial Interfaces
 
-The E80_ADSB_RL project supports two separate serial connection methods for integration and testing.
+The E80_ADSB_RL project supports two alternative serial connection methods. Both have been successfully tested with Stratux.
+
+Both use the same serial configuration:
+
+| Parameter | Value |
+|---|---|
+| Baud rate | 38400 |
+| Data bits | 8 |
+| Parity | None |
+| Stop bits | 1 |
+| Protocol | AVR |
+| Data direction | E80 receiver → Raspberry Pi |
+
+**Important:** Use only one connection method at a time. Both udev rules create the same `/dev/E80` device link.
 
 ### 3.1 Raspberry Pi GPIO UART
 
@@ -73,57 +94,73 @@ Wiring:
 Firmware configuration:
 
 ```cpp
-GPIOSerial.begin(38400);  // Raspberry Pi GPIO UART
+GPIOSerial.begin(38400);
 ```
 
-Serial parameters:
+The Linux device is `/dev/ttyAMA0`.
 
-| Parameter | Value |
-|---|---|
-| Baud rate | 38400 |
-| Data bits | 8 |
-| Parity | None |
-| Stop bits | 1 |
-| Protocol | AVR |
-
-### 3.2 USB-UART Connection
+### 3.2 USB-UART Connection (CH340)
 
 The E80 evaluation board also provides a USB-UART interface through its onboard CH340 adapter.
 
-This interface is intended for development, debugging and monitoring ADS-B messages on a PC.
+Connect the USB interface of the E80 board to a USB port on the Raspberry Pi.
 
-It is independent of the Raspberry Pi GPIO UART.
+The CH340 adapter is identified by the following USB vendor and product IDs:
 
-The Stratux integration described here uses the GPIO UART and the dedicated Linux device name `/dev/E80`.
+| Attribute | Value |
+|---|---|
+| Vendor ID | `1a86` |
+| Product ID | `7523` |
+| Device | CH340 USB-UART converter |
+
+The Linux device normally appears as `/dev/ttyUSB0`.
+
+The USB-UART interface uses the same 38400 baud, 8N1 configuration as the GPIO UART.
+
+This connection has also been successfully tested with Stratux.
 
 ### 3.3 Stratux Device Identification – udev
 
-Stratux identifies the E80 GPIO UART through a dedicated udev symbolic link.
+Stratux uses a common symbolic link named `/dev/E80` for both connection methods.
 
-The relevant rule is included in the repository file:
+The corresponding rules are included in the repository file:
 
 `10-stratux.rules`
 
-The E80-specific rule is:
+The E80-specific rules are:
 
 ```udev
 # E80 ADS-B receiver on GPIO UART
 KERNEL=="ttyAMA0", SYMLINK+="E80"
+
+# E80 ADS-B receiver on USB-UART (CH340)
+SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="E80"
 ```
 
-This creates the symbolic device:
+Depending on the selected connection, this creates one of the following links:
+
+**GPIO UART:**
 
 ```text
 /dev/E80 -> /dev/ttyAMA0
 ```
 
-The rule gives the E80 a dedicated device name instead of requiring Stratux to access `/dev/ttyAMA0` directly.
+**USB-UART:**
 
-**Important:** Linux device names are case-sensitive. The implemented name is `/dev/E80`, with uppercase E. The Stratux code and udev rule must use exactly the same spelling.
+```text
+/dev/E80 -> /dev/ttyUSB0
+```
 
-The rule does not create a second physical UART. `/dev/E80` and `/dev/ttyAMA0` refer to the same serial interface.
+The link gives the E80 a consistent device name regardless of the physical serial interface.
 
-### 3.4 Stratux Ping ADS-B Input
+**Important notes:**
+
+- Linux device names are case-sensitive. The implemented name is `/dev/E80`, with uppercase E.
+- `/dev/E80` is a symbolic link, not a separate physical serial interface.
+- Do not connect GPIO UART and USB-UART simultaneously. Both rules create the same link.
+- The selected serial interface must not be used simultaneously by another service.
+
+## 4. Stratux Ping ADS-B Input
 
 The E80 is integrated into the existing Stratux Ping ADS-B serial input.
 
@@ -142,7 +179,7 @@ The existing `pingSerialReader()` processes AVR messages beginning with `*` and 
 
 No separate aircraft tracking or position calculation is implemented in the E80 receiver.
 
-## 4. AVR Message Format
+## 5. AVR Message Format
 
 The receiver outputs valid Mode-S DF17 messages.
 
@@ -167,33 +204,36 @@ The receiver filters for DF17 messages and calculates the required Mode-S parity
 
 Stratux receives these messages and handles the subsequent aircraft tracking and traffic processing.
 
-## 5. Stratux Configuration and Installation
+## 6. Stratux Configuration and Installation
 
-### 5.1 Requirements
+### 6.1 Requirements
 
 - Raspberry Pi 3B running Stratux.
-- E80 receiver connected to the Raspberry Pi GPIO UART.
-- GPIO UART enabled and available as `/dev/ttyAMA0`.
+- E80 receiver connected using either GPIO UART or USB-UART.
 - E80 firmware configured for 38400 baud.
 - Stratux Ping ADS-B input enabled.
-- The E80 udev rule installed.
+- The E80 udev rules installed.
+- Stratux integration branch `E80-ADSB-RL`.
 
-### 5.2 Installing the udev Rule
+### 6.2 Installing the udev Rules
 
 The repository contains the extended Stratux udev rules file:
 
 `10-stratux.rules`
 
-The E80 rule must be present:
+Both E80 rules must be present:
 
 ```udev
 # E80 ADS-B receiver on GPIO UART
 KERNEL=="ttyAMA0", SYMLINK+="E80"
+
+# E80 ADS-B receiver on USB-UART (CH340)
+SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="E80"
 ```
 
 On Stratux installations using the Overlay File System, the overlay must be unlocked before modifying system files.
 
-Example:
+Copy the updated rules file to the Raspberry Pi. The following example assumes the file is in the current directory:
 
 ```bash
 sudo systemctl stop stratux
@@ -202,7 +242,7 @@ sudo overlayctl unlock
 sudo cp 10-stratux.rules /etc/udev/rules.d/10-stratux.rules
 
 sudo udevadm control --reload-rules
-sudo udevadm trigger --action=add /sys/class/tty/ttyAMA0
+sudo udevadm trigger
 
 ls -l /dev/E80
 
@@ -211,17 +251,25 @@ sudo overlayctl lock
 sudo systemctl start stratux
 ```
 
-The rule should create:
+For GPIO UART, the expected link is:
 
 ```text
 /dev/E80 -> ttyAMA0
 ```
 
+For USB-UART, the expected link is:
+
+```text
+/dev/E80 -> ttyUSB0
+```
+
+For USB-UART, reconnect the USB adapter if necessary so that udev applies the rule.
+
 After a reboot, verify that `/dev/E80` still exists.
 
-### 5.3 Verifying the Serial Input
+### 6.3 Verifying the Serial Input
 
-Stop Stratux before manually accessing the UART, to avoid two processes trying to read the same serial port.
+Stop Stratux before manually accessing the serial device, to avoid two processes trying to read the same serial port.
 
 Example:
 
@@ -240,70 +288,90 @@ After testing, restart Stratux:
 sudo systemctl start stratux
 ```
 
-### 5.4 Stratux Operation
+### 6.4 Stratux Operation
 
 Enable the Ping ADS-B input in Stratux.
 
 The E80 serial input is selected automatically by `initPingSerial()` when the other supported Ping devices are not present.
 
-The E80 uses 38400 baud.
+The E80 uses 38400 baud for both connection methods.
 
 Stratux forwards the received 1090ES messages to dump1090 through its local TCP interface.
 
-## 6. USB Serial Interface
+## 7. USB Serial Interface
 
-The E80 receiver also supports USB serial communication for development and debugging.
+The USB-UART connection is not limited to development and debugging. It is also a tested alternative for connecting the E80 receiver directly to Stratux.
 
-USB serial output is useful for:
+The CH340 adapter is identified by its USB vendor and product IDs (`1a86:7523`).
+
+The udev rule creates `/dev/E80`, just as it does for the GPIO UART connection.
+
+This allows the existing Stratux serial input implementation to work without a separate USB-specific receiver driver.
+
+The USB-UART interface can also be used independently for:
 
 - Monitoring ADS-B messages on a PC.
 - Checking AVR frame formatting.
 - Testing the receiver independently of Stratux.
 - Debugging the firmware.
 
-The USB serial interface and GPIO UART are separate interfaces.
+Only one serial connection method should be used at a time.
 
-The Stratux integration described in this document uses the GPIO UART through `/dev/E80`. USB serial operation as a separate Stratux input is not part of this configuration.
-
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 ### No AVR Messages on Raspberry Pi
 
 Check:
 
-- STM32 TX connected to Raspberry Pi RXD.
+- STM32 TX connected to Raspberry Pi RXD, if using GPIO UART.
 - Common GND.
 - Correct baud rate: 38400.
-- Raspberry Pi GPIO UART enabled.
+- Raspberry Pi GPIO UART enabled, if using GPIO UART.
+- USB-UART adapter connected and recognized, if using USB.
 - E80 receiver operational.
 
 ### `/dev/E80` Does Not Exist
 
-Check the udev rule:
+Check the udev rules:
 
 ```bash
 grep -n E80 /etc/udev/rules.d/10-stratux.rules
 ```
 
-Test whether udev recognizes the rule:
+For GPIO UART, test whether udev recognizes the rule:
 
 ```bash
 sudo udevadm test /sys/class/tty/ttyAMA0 2>&1 | grep -i E80
 ```
 
-Reload and trigger the rule:
+For USB-UART, identify the adapter:
+
+```bash
+lsusb
+```
+
+The CH340 adapter should appear with:
+
+```text
+1a86:7523
+```
+
+Check the serial devices and symbolic link:
+
+```bash
+ls -l /dev/E80
+ls -l /dev/ttyAMA0
+ls -l /dev/ttyUSB*
+```
+
+Reload the rules:
 
 ```bash
 sudo udevadm control --reload-rules
-sudo udevadm trigger --action=add /sys/class/tty/ttyAMA0
-ls -l /dev/E80
+sudo udevadm trigger
 ```
 
-Expected result:
-
-```text
-/dev/E80 -> ttyAMA0
-```
+If necessary, reconnect the USB adapter.
 
 ### AVR Messages Visible, but No Traffic in Stratux
 
@@ -311,21 +379,26 @@ Check:
 
 1. Is the Ping ADS-B input enabled?
 2. Does `/dev/E80` exist?
-3. Is the E80 operating at 38400 baud?
-4. Is Stratux selecting `/dev/E80`?
-5. Are complete AVR frames being received?
-6. Is another service accessing the same UART?
-7. Is the dump1090 forwarding connection operational?
+3. Does `/dev/E80` point to the intended serial device?
+4. Is the E80 operating at 38400 baud?
+5. Is Stratux selecting `/dev/E80`?
+6. Are complete AVR frames being received?
+7. Is another service accessing the same serial interface?
+8. Is the dump1090 forwarding connection operational?
 
 Check the Stratux log for messages indicating that the E80 device was selected and the Ping serial reader started.
+
+Also check that no other supported Ping device is taking precedence over `/dev/E80`.
 
 ### GPS Conflicts
 
 The E80 and GPS inputs must not use the same physical serial interface simultaneously.
 
-The E80 uses the GPIO UART represented by `/dev/ttyAMA0` and `/dev/E80`.
+When using GPIO UART, the E80 uses `/dev/ttyAMA0`, represented by `/dev/E80`.
 
 The GPS must therefore use a different interface if it is connected to the same Raspberry Pi.
+
+The USB-UART connection uses `/dev/ttyUSB0` and avoids occupying the GPIO UART.
 
 Check the available devices:
 
@@ -335,9 +408,31 @@ ls -l /dev/ttyAMA*
 ls -l /dev/ttyUSB*
 ```
 
-Remember that `/dev/E80` is only a symbolic link to `/dev/ttyAMA0`; it does not provide an additional UART.
+Remember that `/dev/E80` is only a symbolic link. It does not provide an additional UART.
 
-## 8. Project Scope
+### Serial Terminal Shows No Data
+
+Stratux may already have the serial device open.
+
+Stop Stratux before testing manually:
+
+```bash
+sudo systemctl stop stratux
+```
+
+Then monitor the selected interface:
+
+```bash
+cat /dev/E80
+```
+
+Restart Stratux after testing:
+
+```bash
+sudo systemctl start stratux
+```
+
+## 9. Project Scope
 
 The E80 receiver provides ADS-B messages only.
 
@@ -349,22 +444,25 @@ The following tasks remain the responsibility of Stratux:
 - Combining ADS-B traffic with GPS information.
 - GDL90 output to connected displays such as XCSoar.
 
-## 9. Tested Hardware
+## 10. Tested Hardware
 
 - Ebyte E80 / LR2021 receiver.
 - STM32F103C8T6.
 - Raspberry Pi 3B running Stratux.
 - GPIO UART connection.
+- USB-UART connection via CH340.
 - 38400 baud serial communication.
 - AVR-compatible DF17 messages.
 - Stratux E80 integration branch: `E80-ADSB-RL`.
 
-## 10. Project Repository
+Both GPIO UART and USB-UART connections have been successfully tested with Stratux.
+
+## 11. Project Repository
 
 **Stratux integration:**
 
 https://github.com/fraktal-sb/stratux/tree/E80-ADSB-RL
 
-The branch contains the E80-specific udev rule and the corresponding Stratux Ping ADS-B serial input changes.
+The branch contains the E80-specific udev rules and the corresponding Stratux Ping ADS-B serial input changes.
 
 This integration is an experimental development project and is not a certified aviation system.
