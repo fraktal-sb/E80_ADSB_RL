@@ -11,7 +11,8 @@ The firmware uses [RadioLib](https://github.com/jgromes/RadioLib) to receive ADS
 - STM32F103C8T6 microcontroller
 - DF17 message output in AVR format
 - Serial output for connection to Stratux
-- GPIO UART and USB-UART connection options
+- GPIO UART connection to Raspberry Pi
+- USB-UART connection for development and debugging
 - No aircraft database or traffic management in the receiver itself
 
 ## Hardware
@@ -95,7 +96,9 @@ The firmware currently outputs DF17 messages. The Mode-S frame includes its CRC 
 
 ## Stratux Integration
 
-The E80 receiver provides raw ADS-B traffic messages to Stratux. Stratux performs aircraft tracking, position calculations and traffic presentation using the received messages and its own GPS data.
+The E80 receiver provides ADS-B traffic messages to Stratux in AVR format.
+
+Stratux processes the received messages and performs aircraft tracking, position calculations and traffic presentation using its own GPS data.
 
 The E80 receiver does not maintain an aircraft database and does not calculate aircraft positions.
 
@@ -114,10 +117,13 @@ ADS-B reception and decoding
 AVR message output
         |
         v
-Serial / USB-UART
+GPIO UART (38400 baud)
         |
         v
-Stratux
+Raspberry Pi / Stratux
+        |
+        v
+dump1090 interface
         |
         v
 Traffic display
@@ -128,13 +134,13 @@ Traffic display
 | Repository | Purpose |
 |---|---|
 | [E80_ADSB_RL](https://github.com/fraktal-sb/E80_ADSB_RL) | E80 receiver firmware and hardware documentation |
-| [Stratux – E80-ADSB branch](https://github.com/fraktal-sb/stratux/tree/E80-ADSB) | Stratux modifications for receiving and processing E80 AVR messages |
+| [Stratux – E80-ADSB-RL branch](https://github.com/fraktal-sb/stratux/tree/E80-ADSB-RL) | Stratux modifications for receiving and processing E80 AVR messages |
 
-The Stratux branch contains the corresponding changes required to receive the E80 data.
+The Stratux branch contains the corresponding changes required to receive E80 data through the Raspberry Pi GPIO UART.
 
 ### Serial interfaces
 
-Two connection methods have been tested separately.
+Two serial connection methods are available. The GPIO UART connection is the tested interface for the Stratux installation.
 
 #### 1. Raspberry Pi GPIO UART
 
@@ -157,28 +163,48 @@ Firmware initialization:
 GPIOSerial.begin(38400);
 ```
 
+On the Raspberry Pi, the Stratux integration uses the device link:
+
+```text
+/dev/E80
+```
+
+This link points to:
+
+```text
+/dev/ttyAMA0
+```
+
+The corresponding udev rule is included in the Stratux repository in `10-stratux.rules`:
+
+```udev
+# E80 ADS-B receiver on GPIO UART
+KERNEL=="ttyAMA0", SYMLINK+="E80"
+```
+
+The Stratux software detects `/dev/E80` and reads the AVR messages at 38400 baud.
+
+**Important:** `/dev/E80` is a symbolic link to the Raspberry Pi's GPIO UART. It is not a separate serial interface. The same UART must not be used simultaneously by another service, for example GPS.
+
 This connection has been successfully tested with Stratux.
 
 #### 2. USB-UART connection
 
 The E80 evaluation board provides a CH340 USB-UART adapter.
 
-The following udev rule creates the `/dev/ping` device link:
+The USB-UART connection can be used to monitor and test the receiver output on a development PC.
 
-```udev
-# Ebyte E80-900M2212S with CH340 USB-UART Adapter
-SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="ping"
+The receiver outputs AVR messages through the serial interface, for example:
+
+```text
+*8D3C66B49908C72E785C1AFCC42D;
 ```
 
-The rule is included in this repository:
+The USB-UART connection is intended for development and debugging. The documented Stratux installation uses the Raspberry Pi GPIO UART.
 
-[`80-e80-adsb.rules`](80-e80-adsb.rules)
+Simultaneous operation of the GPIO UART and USB-UART outputs has not yet been verified.
 
-The USB-UART connection has also been tested separately with Stratux.
-
-**Note:** Simultaneous operation of the GPIO UART and USB-UART outputs has not yet been verified.
-
-For further details, see [STRATUX.md](STRATUX.md).
+For further details about the Raspberry Pi installation, see [STRATUX.md](STRATUX.md).
 
 ## Installation and Configuration
 
@@ -186,8 +212,9 @@ For further details, see [STRATUX.md](STRATUX.md).
 2. Open `E80_ADSB_RL.ino` in the Arduino IDE.
 3. Select the appropriate STM32F103C8T6 board and upload configuration.
 4. Compile and upload the firmware.
-5. Connect the receiver to Stratux using one of the documented serial interfaces.
-6. Use the [Stratux E80-ADSB branch](https://github.com/fraktal-sb/stratux/tree/E80-ADSB).
+5. Connect the receiver's UART output to the Raspberry Pi GPIO UART.
+6. Configure the Stratux installation as described in [STRATUX.md](STRATUX.md).
+7. Use the [Stratux E80-ADSB-RL branch](https://github.com/fraktal-sb/stratux/tree/E80-ADSB-RL).
 
 The receiver configuration and hardware pin assignments are defined in the firmware.
 
@@ -200,16 +227,15 @@ The receiver configuration and hardware pin assignments are defined in the firmw
 | DF17 message output | Working |
 | AVR output format | Working |
 | Raspberry Pi GPIO UART connection | Successfully tested |
-| USB-UART connection | Successfully tested separately |
-| Simultaneous GPIO UART and USB-UART operation | Not yet verified |
 | Stratux traffic display via GPIO UART | Successfully tested |
+| USB-UART connection for development | Successfully tested |
+| Simultaneous GPIO UART and USB-UART operation | Not yet verified |
 
 ## Repository Structure
 
 ```text
 E80_ADSB_RL/
 ├── E80_ADSB_RL.ino
-├── 80-e80-adsb.rules
 ├── README.md
 ├── HARDWARE.md
 ├── STRATUX.md
