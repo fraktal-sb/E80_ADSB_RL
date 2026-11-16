@@ -12,7 +12,8 @@ The firmware uses [RadioLib](https://github.com/jgromes/RadioLib) to receive ADS
 - DF17 message output in AVR format
 - Serial output for connection to Stratux
 - GPIO UART connection to Raspberry Pi
-- USB-UART connection for development and debugging
+- USB-UART connection via CH340 adapter
+- Both serial connection methods successfully tested with Stratux
 - No aircraft database or traffic management in the receiver itself
 
 ## Hardware
@@ -106,26 +107,26 @@ The E80 receiver does not maintain an aircraft database and does not calculate a
 
 ```text
 Ebyte E80 / LR2021
-        |
-        v
+       |
+       v
 STM32F103C8T6
-        |
-        v
+       |
+       v
 ADS-B reception and decoding
-        |
-        v
+       |
+       v
 AVR message output
-        |
-        v
-GPIO UART (38400 baud)
-        |
-        v
+       |
+       v
+GPIO UART or USB-UART
+       |
+       v
 Raspberry Pi / Stratux
-        |
-        v
+       |
+       v
 dump1090 interface
-        |
-        v
+       |
+       v
 Traffic display
 ```
 
@@ -136,11 +137,25 @@ Traffic display
 | [E80_ADSB_RL](https://github.com/fraktal-sb/E80_ADSB_RL) | E80 receiver firmware and hardware documentation |
 | [Stratux – E80-ADSB-RL branch](https://github.com/fraktal-sb/stratux/tree/E80-ADSB-RL) | Stratux modifications for receiving and processing E80 AVR messages |
 
-The Stratux branch contains the corresponding changes required to receive E80 data through the Raspberry Pi GPIO UART.
+The Stratux branch contains the corresponding changes required to receive E80 data through either the Raspberry Pi GPIO UART or a USB-UART adapter.
 
 ### Serial interfaces
 
-Two serial connection methods are available. The GPIO UART connection is the tested interface for the Stratux installation.
+Two alternative serial connection methods are supported and have both been successfully tested with Stratux.
+
+Both use the same serial configuration:
+
+- Baud rate: 38400
+- Data format: 8N1
+- Data direction: E80 receiver → Raspberry Pi
+
+The Stratux integration uses the common device link:
+
+```text
+/dev/E80
+```
+
+**Important:** Only one of the two connection methods should be connected at a time. Both udev rules create the same `/dev/E80` link.
 
 #### 1. Raspberry Pi GPIO UART
 
@@ -151,25 +166,13 @@ Connect the E80 board's UART output to the Raspberry Pi UART input:
 | J2-7 `MCU_TXD` | GPIO15 / RXD, physical pin 10 |
 | GND | GND, physical pin 6 |
 
-Serial configuration:
-
-- Baud rate: 38400
-- Data format: 8N1
-- Data direction: E80 receiver → Raspberry Pi
-
 Firmware initialization:
 
 ```cpp
 GPIOSerial.begin(38400);
 ```
 
-On the Raspberry Pi, the Stratux integration uses the device link:
-
-```text
-/dev/E80
-```
-
-This link points to:
+On the Raspberry Pi, `/dev/E80` points to:
 
 ```text
 /dev/ttyAMA0
@@ -184,25 +187,48 @@ KERNEL=="ttyAMA0", SYMLINK+="E80"
 
 The Stratux software detects `/dev/E80` and reads the AVR messages at 38400 baud.
 
-**Important:** `/dev/E80` is a symbolic link to the Raspberry Pi's GPIO UART. It is not a separate serial interface. The same UART must not be used simultaneously by another service, for example GPS.
-
 This connection has been successfully tested with Stratux.
 
-#### 2. USB-UART connection
+#### 2. USB-UART connection (CH340)
 
 The E80 evaluation board provides a CH340 USB-UART adapter.
 
-The USB-UART connection can be used to monitor and test the receiver output on a development PC.
+Connect the USB interface of the E80 board to a USB port on the Raspberry Pi.
 
-The receiver outputs AVR messages through the serial interface, for example:
+The CH340 adapter is identified by the following USB vendor and product IDs:
 
-```text
-*8D3C66B49908C72E785C1AFCC42D;
+| Attribute | Value |
+|---|---|
+| Vendor ID | `1a86` |
+| Product ID | `7523` |
+| Device | CH340 USB-UART converter |
+
+On the Raspberry Pi, the adapter normally appears as `/dev/ttyUSB0`.
+
+The corresponding udev rule is included in the Stratux repository in `10-stratux.rules`:
+
+```udev
+# E80 ADS-B receiver on USB-UART (CH340)
+SUBSYSTEM=="tty", SUBSYSTEMS=="usb", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="E80"
 ```
 
-The USB-UART connection is intended for development and debugging. The documented Stratux installation uses the Raspberry Pi GPIO UART.
+The rule creates the same device link:
 
-Simultaneous operation of the GPIO UART and USB-UART outputs has not yet been verified.
+```text
+/dev/E80 -> /dev/ttyUSB0
+```
+
+Stratux reads the AVR messages through `/dev/E80` at 38400 baud, just as with the GPIO UART connection.
+
+This connection has also been successfully tested with Stratux.
+
+#### Important notes about the serial connections
+
+- Use either GPIO UART or USB-UART, not both simultaneously.
+- Both connection methods use the same `/dev/E80` device link.
+- The udev rules are maintained in the Stratux repository, in `10-stratux.rules`.
+- The Raspberry Pi must not assign another service to the selected serial interface.
+- When Stratux is running, it owns the serial device. Stop Stratux before testing the port manually with a serial terminal.
 
 For further details about the Raspberry Pi installation, see [STRATUX.md](STRATUX.md).
 
@@ -212,7 +238,7 @@ For further details about the Raspberry Pi installation, see [STRATUX.md](STRATU
 2. Open `E80_ADSB_RL.ino` in the Arduino IDE.
 3. Select the appropriate STM32F103C8T6 board and upload configuration.
 4. Compile and upload the firmware.
-5. Connect the receiver's UART output to the Raspberry Pi GPIO UART.
+5. Connect the receiver to the Raspberry Pi using either GPIO UART or USB-UART.
 6. Configure the Stratux installation as described in [STRATUX.md](STRATUX.md).
 7. Use the [Stratux E80-ADSB-RL branch](https://github.com/fraktal-sb/stratux/tree/E80-ADSB-RL).
 
@@ -228,8 +254,9 @@ The receiver configuration and hardware pin assignments are defined in the firmw
 | AVR output format | Working |
 | Raspberry Pi GPIO UART connection | Successfully tested |
 | Stratux traffic display via GPIO UART | Successfully tested |
-| USB-UART connection for development | Successfully tested |
-| Simultaneous GPIO UART and USB-UART operation | Not yet verified |
+| Raspberry Pi USB-UART connection (CH340) | Successfully tested |
+| Stratux traffic display via USB-UART | Successfully tested |
+| Simultaneous GPIO UART and USB-UART operation | Not tested; use only one connection at a time |
 
 ## Repository Structure
 
